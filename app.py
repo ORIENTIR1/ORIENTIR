@@ -64,15 +64,15 @@ def handle_request():
                 400,
             )
 
-        logger.info("⚡ Отправляем запрос в OpenAI через ChatCompletion.create...")
+        logger.info("⚡ Отправляем запрос в OpenAI через новый метод ChatCompletions...")
 
-        # Используем стабильный метод ChatCompletion вместо beta.threads
-        response = openai.ChatCompletion.create(
+        # Используем актуальный метод completions.create, совместимый с openai>=1.0.0
+        response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": user_message}]
         )
-        
-        response_message = response.choices[0].message["content"].strip()
+
+        response_message = response.choices[0].message.content.strip()
 
         send_response_to_jivochat(response_message, chat_id, client_id)
 
@@ -126,4 +126,3 @@ def send_response_to_jivochat(response_message, chat_id, client_id):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
