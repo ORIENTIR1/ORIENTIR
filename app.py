@@ -1,3 +1,8 @@
+import os
+os.environ.pop("HTTP_PROXY", None)
+os.environ.pop("HTTPS_PROXY", None)
+os.environ.pop("http_proxy", None)
+os.environ.pop("https_proxy", None)
 from flask import Flask, jsonify, request
 import openai
 import os
