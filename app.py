@@ -27,10 +27,6 @@ load_dotenv()
 # Настраиваем API OpenAI
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Обновленная логика: Используем Session из requests для управления прокси
-session = requests.Session()
-session.proxies = {}  # Очищаем все прокси
-
 JIVOCHAT_WEBHOOK_URL = os.getenv(
     "JIVOCHAT_WEBHOOK_URL",
     "https://bot.jivosite.com/webhooks/WEVYtVZzXuYaG3/mygpttoken123",
@@ -67,17 +63,16 @@ def handle_request():
                 400,
             )
 
-        logger.info("⚡ Отправляем запрос в OpenAI через метод ChatCompletion...")
+        logger.info("⚡ Отправляем запрос в OpenAI через метод chat.completions.create...")
 
-        # Используем базовый вызов openai с очищенными прокси
-        response = openai.ChatCompletion.create(
+        # Используем актуальный метод chat.completions.create для совместимости с openai>=1.0.0
+        response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": user_message}],
-            request_timeout=10,
-            session=session  # Используем сессию без прокси
+            timeout=10
         )
 
-        response_message = response.choices[0].message["content"].strip()
+        response_message = response.choices[0].message.content.strip()
 
         send_response_to_jivochat(response_message, chat_id, client_id)
 
@@ -112,7 +107,7 @@ def send_response_to_jivochat(response_message, chat_id, client_id):
         logger.info(
             f"📤 Отправка ответа в JivoChat на URL: {JIVOCHAT_WEBHOOK_URL}, Данные: {data}"
         )
-        response = session.post(
+        response = requests.post(
             JIVOCHAT_WEBHOOK_URL, json=data, headers=headers, timeout=3
         )
         logger.info(
