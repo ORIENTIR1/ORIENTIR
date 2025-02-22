@@ -26,7 +26,10 @@ load_dotenv()
 
 # Настраиваем API OpenAI
 openai.api_key = os.getenv("OPENAI_API_KEY")
-openai.proxy = {}  # Явно очищаем любые прокси
+
+# Переопределяем HTTP-клиент OpenAI без прокси
+from openai._base_client import AsyncHttpxClient
+openai._client = AsyncHttpxClient(proxies=None)
 
 JIVOCHAT_WEBHOOK_URL = os.getenv(
     "JIVOCHAT_WEBHOOK_URL",
@@ -64,12 +67,13 @@ def handle_request():
                 400,
             )
 
-        logger.info("⚡ Отправляем запрос в OpenAI через новый метод ChatCompletions...")
+        logger.info("⚡ Отправляем запрос в OpenAI через метод chat.completions.create...")
 
         # Используем актуальный метод completions.create, совместимый с openai>=1.0.0
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": user_message}]
+            messages=[{"role": "user", "content": user_message}],
+            timeout=10
         )
 
         response_message = response.choices[0].message.content.strip()
@@ -126,3 +130,4 @@ def send_response_to_jivochat(response_message, chat_id, client_id):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
