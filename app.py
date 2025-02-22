@@ -22,23 +22,14 @@ load_dotenv()
 # Настраиваем API OpenAI
 openai.api_key = os.getenv("OPENAI_API_KEY")
 AGENT_ID = os.getenv("AGENT_ID", None)  # Если агент уже создан, используем его ID
-JIVOCHAT_WEBHOOK_URL = os.getenv("JIVOCHAT_WEBHOOK_URL")
-
-# Проверка, что переменные окружения настроены
-if not openai.api_key:
-    logger.error("OPENAI_API_KEY не настроен")
-    raise ValueError("OPENAI_API_KEY не настроен")
-if not JIVOCHAT_WEBHOOK_URL:
-    logger.error("JIVOCHAT_WEBHOOK_URL не настроен")
-    raise ValueError("JIVOCHAT_WEBHOOK_URL не настроен")
+JIVOCHAT_WEBHOOK_URL = os.getenv("JIVOCHAT_WEBHOOK_URL", "https://bot.jivosite.com/webhooks/WEVYtVZzXuYaG3/mygpttoken123")
 
 # Создаем или получаем агента OpenAI при запуске (если AGENT_ID не задан)
 if not AGENT_ID:
     def create_agent():
-        try:
-            response = openai.beta.assistants.create(
-                name="Менеджер по продажам сувенирной продукции",
-                instructions="""
+        response = openai.beta.assistants.create(
+            name="Менеджер по продажам сувенирной продукции",
+            instructions="""
 Ты — менеджер по продажам брендированной сувенирной продукции.  
 ВАЖНО: Твоя задача поэтапно выполнять действия, задавать вопросы в виде интервью и переходить к следующему шагу только после ответа клиента.
 Твои действия:
@@ -50,29 +41,21 @@ if not AGENT_ID:
 Общайся вежливо, профессионально, с ориентацией на выявление потребностей клиента. Все взаимодействие должно опираться на методики из книги Скрипты продаж. Готовые сценарии холодных звонков и личных встреч Дмитрия Ткаченко. 
 Если клиент просит визуализацию - бери информацию и фотографии только с сайта, на котором клиент находится и обратился к тебе.
 """,
-                tools=[{"type": "code_interpreter"}],
-                model="gpt-3.5-turbo"  # Используем более быструю модель для скорости
-            )
-            logger.info(f"Агент создан с ID: {response.id}")
-            return response.id
-        except Exception as e:
-            logger.error(f"Ошибка при создании агента OpenAI: {str(e)}")
-            raise
+            tools=[{"type": "code_interpreter"}],
+            model="gpt-4o"
+        )
+        return response.id
 
     # Создаем агента при запуске, если AGENT_ID не указан
-    try:
-        AGENT_ID = os.getenv("AGENT_ID", create_agent())
-        logger.info(f"Используется агент с ID: {AGENT_ID}")
-    except Exception as e:
-        logger.error(f"Не удалось инициализировать AGENT_ID: {str(e)}")
-        raise
+    AGENT_ID = os.getenv("AGENT_ID", create_agent())
+    logger.info(f"Используется агент с ID: {AGENT_ID}")
 
 @app.route('/', methods=['GET'])
 def index():
     """Проверка, что сервис работает."""
     return jsonify({"message": "Сервис работает! 🟢"}), 200
 
-@app.route('/mygpttoken123', methods=['POST'])
+@app.route('/mygpttoken123', methods=['POST'])  # Убрал GET, так как Jivo использует только POST
 def handle_request():
     """Обработка запросов от JivoChat с использованием OpenAI."""
     logger.info(f"Получен запрос на /mygpttoken123: URL={request.url}, Data={request.json}")
@@ -80,7 +63,7 @@ def handle_request():
         data = request.json
         logger.info(f"Полученные данные от Jivo: {data}")
 
-        # Проверка обязательных полей согласно Jivo
+        # Проверка обязательных полей
         event = data.get('event', '')
         chat_id = data.get('chat_id', '')
         client_id = data.get('client_id', '')
@@ -100,17 +83,16 @@ def handle_request():
             assistant_id=AGENT_ID
         )
 
-        # Ожидание завершения с минимальным тайм-аутом (2 секунды для быстрого ответа)
-        max_wait_time = 2  # Уменьшаем до 2 секунд для соответствия Jivo (3 сек лимит)
+        # Ожидание завершения с тайм-аутом (3 секунды для соответствия Jivo)
+        max_wait_time = 3  # Уменьшаем до 3 секунд, как указано в документации
         start_time = time.time()
         while time.time() - start_time < max_wait_time:
             run_status = openai.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
             if run_status.status == "completed":
                 break
-            time.sleep(0.2)  # Уменьшаем задержку для скорости
+            time.sleep(0.5)  # Уменьшаем задержку для скорости
 
         if run_status.status != "completed":
-            logger.error("Превышено время ожидания ответа от OpenAI")
             return jsonify({"error": {"code": "timeout", "message": "Превышено время ожидания ответа от OpenAI"}}), 504
 
         # Получаем ответ от OpenAI
@@ -130,8 +112,8 @@ def handle_request():
 def send_response_to_jivochat(response_message, chat_id, client_id):
     """Отправка ответа обратно в JivoChat через webhook."""
     if not JIVOCHAT_WEBHOOK_URL:
-        logger.error("JIVOCHAT_WEBHOOK_URL не настроен, ответ не отправлен")
-        raise ValueError("JIVOCHAT_WEBHOOK_URL не настроен")
+        logger.warning("JIVOCHAT_WEBHOOK_URL не настроен, ответ не отправлен")
+        return
 
     headers = {'Content-Type': 'application/json'}
     data = {
@@ -148,15 +130,16 @@ def send_response_to_jivochat(response_message, chat_id, client_id):
 
     try:
         logger.info(f"Отправка ответа в JivoChat на URL: {JIVOCHAT_WEBHOOK_URL}, Данные: {data}")
-        response = requests.post(JIVOCHAT_WEBHOOK_URL, json=data, headers=headers, timeout=2)  # Тайм-аут 2 секунды
+        response = requests.post(JIVOCHAT_WEBHOOK_URL, json=data, headers=headers, timeout=3)  # Тайм-аут 3 секунды
         logger.info(f"Ответ от JivoChat: статус={response.status_code}, тело={response.text}")
         if response.status_code == 200:
             logger.info("✅ Ответ успешно отправлен в JivoChat")
         else:
             logger.error(f"⚠️ Ошибка при отправке в JivoChat: {response.status_code} - {response.text}")
-            raise Exception(f"Ошибка JivoChat: {response.status_code} - {response.text}")
     except Exception as e:
         logger.error(f"❌ Ошибка при подключении к JivoChat: {str(e)}")
-        raise
 
-# Убран блок if __name__ == '__main__', так как сервер запускается через Gunicorn
+if __name__ == '__main__':
+    # Запуск приложения на указанном порту (для локального теста)
+    port = int(os.getenv("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
