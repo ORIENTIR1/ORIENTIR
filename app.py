@@ -138,8 +138,3 @@ def send_response_to_jivochat(response_message, chat_id, client_id):
             logger.error(f"⚠️ Ошибка при отправке в JivoChat: {response.status_code} - {response.text}")
     except Exception as e:
         logger.error(f"❌ Ошибка при подключении к JivoChat: {str(e)}")
-
-if __name__ == '__main__':
-    # Запуск приложения на указанном порту (для локального теста)
-    port = int(os.getenv("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
