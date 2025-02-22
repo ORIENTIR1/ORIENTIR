@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import flask, jsonify, request
 import openai
 import os
 import requests
