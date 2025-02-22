@@ -27,9 +27,11 @@ load_dotenv()
 # Настраиваем API OpenAI
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Переопределяем HTTP-клиент OpenAI без прокси
-from openai._base_client import AsyncHttpxClient
-openai._client = AsyncHttpxClient(proxies=None)
+# Попытка использовать сессию OpenAI без прокси через глобальные настройки
+try:
+    openai._client._client._proxies = None  # Если структура клиента позволяет
+except AttributeError:
+    logger.warning("⚠️ Невозможно явно убрать прокси через _client, продолжаем без этого шага.")
 
 JIVOCHAT_WEBHOOK_URL = os.getenv(
     "JIVOCHAT_WEBHOOK_URL",
@@ -130,4 +132,3 @@ def send_response_to_jivochat(response_message, chat_id, client_id):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
